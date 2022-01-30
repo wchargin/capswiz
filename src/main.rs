@@ -5,6 +5,7 @@ use std::io::{self, BufReader, Read};
 use std::path::PathBuf;
 
 use clap::Parser;
+use rand::distributions::{Bernoulli, Distribution};
 
 #[derive(Parser)]
 struct Opts {
@@ -115,7 +116,6 @@ fn score(guess: &[u8], corpus: &Corpus<'_>) -> i64 {
 fn main() -> io::Result<()> {
     let opts = Opts::parse();
     dbg!(&opts.haystack);
-    let haystack = opts.haystack.clone().into_bytes();
 
     let mut words_bytes = Vec::new();
     BufReader::new(File::open(&opts.words)?).read_to_end(&mut words_bytes)?;
@@ -125,10 +125,56 @@ fn main() -> io::Result<()> {
         .filter(|x| !x.is_empty())
         .collect();
 
-    let mut guess_buf: Vec<u8> = Vec::new();
-    base64::decode_config_buf(&haystack, base64::STANDARD, &mut guess_buf).unwrap();
+    let mut best_haystack = opts.haystack.clone().into_bytes();
+    let mut best_guess: Vec<u8> = Vec::new();
+    base64::decode_config_buf(&best_haystack, base64::STANDARD, &mut best_guess).unwrap();
+    let mut best_score = score(&best_guess, &corpus);
 
-    dbg!(score(&guess_buf, &corpus));
+    let mut current_haystack: Vec<u8> = Vec::with_capacity(best_haystack.len());
+    let mut current_guess: Vec<u8> = Vec::with_capacity(best_guess.len());
+    let mut p_flip = 0.5;
+    let mut rng = rand::thread_rng();
+    loop {
+        let should_flip = Bernoulli::new(p_flip).unwrap();
+        current_haystack.clear();
+        current_haystack.extend(&best_haystack);
+        for b in &mut current_haystack {
+            if b.is_ascii_alphabetic() && should_flip.sample(&mut rng) {
+                *b ^= 0x20;
+            }
+        }
 
-    Ok(())
+        match base64::decode_config_buf(&current_haystack, base64::STANDARD, &mut current_guess) {
+            Ok(()) => (),
+            Err(base64::DecodeError::InvalidLastSymbol(_, _)) => println!(
+                "{} has invalid last byte; skipping",
+                debug_bytestring(&current_haystack)
+            ),
+            Err(e) => panic!("decoding {}: {:?}", debug_bytestring(&current_haystack), e),
+        };
+        p_flip = (p_flip * 0.999).max(0.01);
+
+        let current_score = score(&current_guess, &corpus);
+        println!(
+            "{} -> {}: {} -> {}{} || best: {}",
+            best_score,
+            current_score,
+            debug_bytestring(&best_guess),
+            debug_bytestring(&current_guess),
+            if current_score > best_score {
+                " (improved!)"
+            } else {
+                ""
+            },
+            debug_bytestring(&best_haystack),
+        );
+        if current_score > best_score {
+            best_haystack.clear();
+            best_haystack.extend(&current_haystack);
+            best_guess.clear();
+            best_guess.extend(&current_guess);
+            best_score = current_score;
+        }
+        current_guess.clear();
+    }
 }
