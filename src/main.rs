@@ -113,6 +113,27 @@ fn score(guess: &[u8], corpus: &Corpus<'_>) -> i64 {
     score
 }
 
+struct Search {
+    haystack: Vec<u8>,
+    guess: Vec<u8>,
+    score: i64,
+}
+
+impl Search {
+    fn copy_from(&mut self, other: &Self) {
+        self.clear();
+        self.haystack.extend(&other.haystack);
+        self.guess.extend(&other.guess);
+        self.score = other.score;
+    }
+
+    fn clear(&mut self) {
+        self.haystack.clear();
+        self.guess.clear();
+        self.score = i64::MIN;
+    }
+}
+
 fn main() -> io::Result<()> {
     let opts = Opts::parse();
     dbg!(&opts.haystack);
@@ -125,56 +146,63 @@ fn main() -> io::Result<()> {
         .filter(|x| !x.is_empty())
         .collect();
 
-    let mut best_haystack = opts.haystack.clone().into_bytes();
-    let mut best_guess: Vec<u8> = Vec::new();
-    base64::decode_config_buf(&best_haystack, base64::STANDARD, &mut best_guess).unwrap();
-    let mut best_score = score(&best_guess, &corpus);
+    let mut best = {
+        let haystack = opts.haystack.clone().into_bytes();
+        let mut guess: Vec<u8> = Vec::new();
+        base64::decode_config_buf(&haystack, base64::STANDARD, &mut guess).unwrap();
+        let score = score(&guess, &corpus);
+        Search {
+            haystack,
+            guess,
+            score,
+        }
+    };
 
-    let mut current_haystack: Vec<u8> = Vec::with_capacity(best_haystack.len());
-    let mut current_guess: Vec<u8> = Vec::with_capacity(best_guess.len());
     let mut p_flip = 0.5;
     let mut rng = rand::thread_rng();
+
+    let mut scratch = Search {
+        haystack: Vec::with_capacity(best.haystack.len()),
+        guess: Vec::with_capacity(best.guess.len()),
+        score: i64::MIN,
+    };
     loop {
+        scratch.clear();
+
         let should_flip = Bernoulli::new(p_flip).unwrap();
-        current_haystack.clear();
-        current_haystack.extend(&best_haystack);
-        for b in &mut current_haystack {
+        scratch.haystack.extend(&best.haystack);
+        for b in &mut scratch.haystack {
             if b.is_ascii_alphabetic() && should_flip.sample(&mut rng) {
                 *b ^= 0x20;
             }
         }
 
-        match base64::decode_config_buf(&current_haystack, base64::STANDARD, &mut current_guess) {
+        match base64::decode_config_buf(&scratch.haystack, base64::STANDARD, &mut scratch.guess) {
             Ok(()) => (),
             Err(base64::DecodeError::InvalidLastSymbol(_, _)) => println!(
                 "{} has invalid last byte; skipping",
-                debug_bytestring(&current_haystack)
+                debug_bytestring(&scratch.haystack)
             ),
-            Err(e) => panic!("decoding {}: {:?}", debug_bytestring(&current_haystack), e),
+            Err(e) => panic!("decoding {}: {:?}", debug_bytestring(&scratch.haystack), e),
         };
         p_flip = (p_flip * 0.999).max(0.01);
 
-        let current_score = score(&current_guess, &corpus);
+        scratch.score = score(&scratch.guess, &corpus);
         println!(
             "{} -> {}: {} -> {}{} || best: {}",
-            best_score,
-            current_score,
-            debug_bytestring(&best_guess),
-            debug_bytestring(&current_guess),
-            if current_score > best_score {
+            best.score,
+            scratch.score,
+            debug_bytestring(&best.guess),
+            debug_bytestring(&scratch.guess),
+            if scratch.score > best.score {
                 " (improved!)"
             } else {
                 ""
             },
-            debug_bytestring(&best_haystack),
+            debug_bytestring(&scratch.haystack),
         );
-        if current_score > best_score {
-            best_haystack.clear();
-            best_haystack.extend(&current_haystack);
-            best_guess.clear();
-            best_guess.extend(&current_guess);
-            best_score = current_score;
+        if scratch.score > best.score {
+            best.copy_from(&scratch);
         }
-        current_guess.clear();
     }
 }
