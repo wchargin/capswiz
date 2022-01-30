@@ -162,7 +162,8 @@ fn main() -> io::Result<()> {
         }
     };
 
-    let mut heads = Vec::with_capacity(4);
+    const N_HEADS: usize = 4;
+    let mut heads = Vec::with_capacity(N_HEADS);
     for _ in 0..heads.capacity() {
         heads.push(best.clone());
     }
@@ -200,7 +201,7 @@ fn main() -> io::Result<()> {
             ),
             Err(e) => panic!("decoding {}: {:?}", debug_bytestring(&scratch.haystack), e),
         };
-        p_flip = (p_flip * 0.999).max(0.01);
+        p_flip = (p_flip * (0.999f64.powf(1.0 / N_HEADS as f64))).max(0.01);
 
         scratch.score = score(&scratch.guess, &corpus);
         println!(
