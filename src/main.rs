@@ -16,6 +16,9 @@ struct Opts {
     haystack: String,
     #[clap(long, default_value = "/usr/share/dict/words")]
     words: PathBuf,
+    /// Expected value: if given, search will stop after reaching this. Used for benchmarking.
+    #[clap(long)]
+    expect: Option<String>,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Hash)]
@@ -151,6 +154,7 @@ fn main() -> io::Result<()> {
     init_logging();
     let opts = Opts::parse();
     debug!("opts: {:?}", opts);
+    let expected_bytes = opts.expect.as_ref().map(|s| s.as_bytes());
 
     let mut words_bytes = Vec::new();
     BufReader::new(File::open(&opts.words)?).read_to_end(&mut words_bytes)?;
@@ -242,10 +246,14 @@ fn main() -> io::Result<()> {
                 debug_bytestring(&best.haystack),
                 best.score,
             );
+            if expected_bytes == Some(&best.guess[..]) {
+                break;
+            }
         }
         if scratch.score > heads[head_index].score {
             heads[head_index].copy_from(&scratch);
         }
     }
-    unreachable!()
+
+    Ok(())
 }
