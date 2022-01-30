@@ -95,9 +95,10 @@ fn score(guess: &[u8], corpus: &Corpus<'_>) -> i64 {
             10
         } else if b.is_ascii_whitespace() {
             5
-        } else if b.is_ascii_control() {
+        } else if b.is_ascii_control() || !b.is_ascii() {
             -100
         } else {
+            // Punctuation, etc.
             0
         };
     }
