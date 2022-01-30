@@ -212,6 +212,7 @@ fn main() -> io::Result<()> {
                         debug_bytestring(&scratch.haystack)
                     );
                 }
+                continue;
             }
             Err(e) => panic!("decoding {}: {:?}", debug_bytestring(&scratch.haystack), e),
         };
