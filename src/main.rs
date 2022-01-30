@@ -5,7 +5,10 @@ use std::io::{self, BufReader, Read};
 use std::path::PathBuf;
 
 use clap::Parser;
-use rand::distributions::{Bernoulli, Distribution};
+use rand::{
+    distributions::{Bernoulli, Distribution},
+    seq::SliceRandom,
+};
 
 #[derive(Parser)]
 struct Opts {
@@ -113,6 +116,7 @@ fn score(guess: &[u8], corpus: &Corpus<'_>) -> i64 {
     score
 }
 
+#[derive(Clone)]
 struct Search {
     haystack: Vec<u8>,
     guess: Vec<u8>,
@@ -158,7 +162,14 @@ fn main() -> io::Result<()> {
         }
     };
 
+    let mut heads = Vec::with_capacity(4);
+    for _ in 0..heads.capacity() {
+        heads.push(best.clone());
+    }
+
     let mut p_flip = 0.5;
+    let p_inherit = 0.01;
+    let should_inherit = Bernoulli::new(p_inherit).unwrap();
     let mut rng = rand::thread_rng();
 
     let mut scratch = Search {
@@ -166,12 +177,16 @@ fn main() -> io::Result<()> {
         guess: Vec::with_capacity(best.guess.len()),
         score: i64::MIN,
     };
-    loop {
+    for head_index in (0..heads.len()).into_iter().cycle() {
         scratch.clear();
+        scratch.haystack.extend(&heads[head_index].haystack);
 
         let should_flip = Bernoulli::new(p_flip).unwrap();
-        scratch.haystack.extend(&best.haystack);
-        for b in &mut scratch.haystack {
+        for (i, b) in scratch.haystack.iter_mut().enumerate() {
+            if should_inherit.sample(&mut rng) {
+                let head = SliceRandom::choose(&heads[..], &mut rng).unwrap();
+                *b = head.haystack[i];
+            }
             if b.is_ascii_alphabetic() && should_flip.sample(&mut rng) {
                 *b ^= 0x20;
             }
@@ -204,5 +219,9 @@ fn main() -> io::Result<()> {
         if scratch.score > best.score {
             best.copy_from(&scratch);
         }
+        if scratch.score > heads[head_index].score {
+            heads[head_index].copy_from(&scratch);
+        }
     }
+    unreachable!()
 }
