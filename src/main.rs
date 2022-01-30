@@ -43,6 +43,13 @@ impl fmt::Debug for Trigram {
     }
 }
 
+impl Trigram {
+    fn trigrams(word: &[u8]) -> impl Iterator<Item = Trigram> + '_ {
+        word.windows(3)
+            .map(|t| Trigram::try_from(t).expect("trigrams: bad window size"))
+    }
+}
+
 #[derive(Debug)]
 struct Corpus<'a> {
     words: HashSet<&'a [u8]>,
@@ -61,10 +68,8 @@ impl<'a> std::iter::FromIterator<&'a [u8]> for Corpus<'a> {
         let mut total = 0;
         let mut words = HashSet::new();
         for word in iter {
-            let word: &'a [u8] = word.as_ref();
             words.insert(word);
-            for trigram in word.windows(3) {
-                let trigram: Trigram = trigram.try_into().expect("trigrams: bad window size");
+            for trigram in Trigram::trigrams(word) {
                 *freqs.entry(trigram).or_default() += 1;
                 total += 1;
             }
@@ -99,8 +104,7 @@ fn score(guess: &[u8], corpus: &Corpus<'_>) -> i64 {
         }
     }
 
-    for trigram in guess.windows(3) {
-        let trigram: Trigram = trigram.try_into().expect("trigrams: bad window size");
+    for trigram in Trigram::trigrams(&guess) {
         let freq = *corpus.trigrams.freqs.get(&trigram).unwrap_or(&0);
         score += (freq as i64 * 10) / (corpus.trigrams.total as i64);
     }
