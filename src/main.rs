@@ -5,12 +5,13 @@ use std::io::{self, BufReader, Read};
 use std::path::PathBuf;
 
 use clap::Parser;
+use log::{debug, info};
 use rand::{
     distributions::{Bernoulli, Distribution},
     seq::SliceRandom,
 };
 
-#[derive(Parser)]
+#[derive(Debug, Parser)]
 struct Opts {
     haystack: String,
     #[clap(long, default_value = "/usr/share/dict/words")]
@@ -139,9 +140,17 @@ impl Search {
     }
 }
 
+fn init_logging() {
+    use env_logger::{Builder, Env};
+    Builder::from_env(Env::default().default_filter_or("info"))
+        .format_timestamp_micros()
+        .init();
+}
+
 fn main() -> io::Result<()> {
+    init_logging();
     let opts = Opts::parse();
-    dbg!(&opts.haystack);
+    debug!("opts: {:?}", opts);
 
     let mut words_bytes = Vec::new();
     BufReader::new(File::open(&opts.words)?).read_to_end(&mut words_bytes)?;
@@ -196,8 +205,8 @@ fn main() -> io::Result<()> {
 
         match base64::decode_config_buf(&scratch.haystack, base64::STANDARD, &mut scratch.guess) {
             Ok(()) => (),
-            Err(base64::DecodeError::InvalidLastSymbol(_, _)) => println!(
-                "{} has invalid last byte; skipping",
+            Err(base64::DecodeError::InvalidLastSymbol(_, _)) => debug!(
+                "{}: skipping due to invalid last byte",
                 debug_bytestring(&scratch.haystack)
             ),
             Err(e) => panic!("decoding {}: {:?}", debug_bytestring(&scratch.haystack), e),
@@ -205,7 +214,7 @@ fn main() -> io::Result<()> {
         p_flip = (p_flip * (0.999f64.powf(1.0 / N_HEADS as f64))).max(0.01);
 
         scratch.score = score(&scratch.guess, &corpus);
-        println!(
+        debug!(
             "{} -> {}: {} -> {}{} || best: {}",
             best.score,
             scratch.score,
@@ -220,6 +229,12 @@ fn main() -> io::Result<()> {
         );
         if scratch.score > best.score {
             best.copy_from(&scratch);
+            info!(
+                "guess: {} (base64: {}, score: {})",
+                debug_bytestring(&best.guess),
+                debug_bytestring(&best.haystack),
+                best.score,
+            );
         }
         if scratch.score > heads[head_index].score {
             heads[head_index].copy_from(&scratch);
