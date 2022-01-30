@@ -162,7 +162,7 @@ fn main() -> io::Result<()> {
         }
     };
 
-    const N_HEADS: usize = 4;
+    const N_HEADS: usize = 16;
     let mut heads = Vec::with_capacity(N_HEADS);
     for _ in 0..heads.capacity() {
         heads.push(best.clone());
