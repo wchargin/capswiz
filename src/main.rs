@@ -215,7 +215,7 @@ fn main() -> io::Result<()> {
             } else {
                 ""
             },
-            debug_bytestring(&scratch.haystack),
+            debug_bytestring(&best.haystack),
         );
         if scratch.score > best.score {
             best.copy_from(&scratch);
