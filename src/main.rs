@@ -27,7 +27,7 @@ fn debug_bytestring(bs: &[u8]) -> String {
     let mut result = String::with_capacity(3 + bs.len() * 3);
     result.push_str("b\"");
     for &b in bs {
-        if b.is_ascii_graphic() {
+        if b == b' ' || b.is_ascii_graphic() {
             result.push(b as char);
         } else {
             result.push_str(&format!("\\x{:02x}", b));
